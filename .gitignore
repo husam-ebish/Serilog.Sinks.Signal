@@ -1,0 +1,25 @@
+# User-specific files
+*.suo
+*.user
+
+# JetBrains Rider
+.idea
+
+# Build results
+bin/
+obj/
+
+# Test coverage
+coverage.*.xml
+
+# Visual Studio 2015 cache/options directory
+.vs/
+
+# ReSharper is a .NET coding add-in
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# NuGet Packages
+*.nupkg
+*.snupkg
