@@ -2,7 +2,7 @@
 
 public class SignalLogMessage
 {
-    internal SignalLogMessage(string message, string number, string[] recipients)
+    public SignalLogMessage(string message, string number, string[] recipients)
     {
         Message = message;
         Number = number;

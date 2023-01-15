@@ -13,7 +13,6 @@
 // limitations under the License.
 
 using System;
-using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -38,10 +37,8 @@ namespace Serilog.Sinks.Signal
         /// Sends a POST request to the specified Uri as an asynchronous operation.
         /// </summary>
         /// <param name="requestUri">The Uri the request is sent to.</param>
-        /// <param name="contentStream">The stream containing the content of the request.</param>
+        /// <param name="requestContent">Signal message content of the request.</param>
         /// <returns>The task object representing the asynchronous operation.</returns>
-        Task<HttpResponseMessage> PostAsync(string requestUri, Stream contentStream);
-
         Task<HttpResponseMessage> PostAsync(string requestUri, SignalLogMessage requestContent);
     }
 }
