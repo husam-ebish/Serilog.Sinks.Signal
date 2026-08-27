@@ -8,6 +8,8 @@
 # Build results
 bin/
 obj/
+artifacts/
+TestResults/
 
 # Test coverage
 coverage.*.xml

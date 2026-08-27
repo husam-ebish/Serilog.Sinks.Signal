@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate tag and package version
+        shell: pwsh
+        run: |
+          $tagVersion = $env:GITHUB_REF_NAME -replace '^v', ''
+          [xml]$project = Get-Content -LiteralPath 'src/Serilog.Sinks.Signal/Serilog.Sinks.Signal.csproj' -Raw
+          $projectVersion = $project.Project.PropertyGroup.VersionPrefix | Select-Object -First 1
+
+          if ($tagVersion -ne $projectVersion) {
+            throw "Tag version '$tagVersion' does not match VersionPrefix '$projectVersion'."
+          }
+
+          "PACKAGE_VERSION=$tagVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Restore
+        run: dotnet restore --locked-mode
+
+      - name: Verify formatting
+        run: dotnet format "Serilog Sinks Signal.sln" --no-restore --verify-no-changes
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build
+
+      - name: Pack
+        run: dotnet pack src/Serilog.Sinks.Signal/Serilog.Sinks.Signal.csproj --configuration Release --no-build --output artifacts/packages
+
+      - name: Sign in to NuGet.org
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Publish to NuGet.org
+        run: dotnet nuget push "artifacts/packages/Serilog.Sinks.Signal.${PACKAGE_VERSION}.nupkg" --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/packages/*.nupkg artifacts/packages/*.snupkg --verify-tag --generate-notes --title "Serilog.Sinks.Signal ${PACKAGE_VERSION}"
