@@ -968,7 +968,7 @@ The command is the same on Linux and Windows when using the .NET CLI.
 
 ## Changelog
 
-### 1.2.0 (unreleased)
+### 1.2.0 (2026-08-27)
 
 * Added unit and loopback HTTP integration tests, coverage collection, CI, Dependabot, locked restores, package validation, automated tag-based publishing, and local package-feed testing.
 * Updated the supported targets to .NET Framework 4.6.2 and .NET Standard 2.0.
