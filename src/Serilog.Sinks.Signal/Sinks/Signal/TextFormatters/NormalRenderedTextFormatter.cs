@@ -1,4 +1,4 @@
-﻿// Copyright 2015-2023 Serilog Contributors
+// Copyright 2015-2023 Serilog Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ using Serilog.Formatting;
 namespace Serilog.Sinks.Signal.TextFormatters
 {
     /// <summary>
-    /// JSON formatter serializing log events into a normal format with the message template
+    /// Text formatter serializing log events into a human-readable format with the message template
     /// rendered into a message. This is the most verbose formatter and its network load is higher
     /// than the other formatters.
     /// </summary>

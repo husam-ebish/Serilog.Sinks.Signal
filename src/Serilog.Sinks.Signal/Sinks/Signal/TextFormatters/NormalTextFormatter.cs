@@ -1,4 +1,4 @@
-﻿// Copyright 2015-2023 Serilog Contributors
+// Copyright 2015-2023 Serilog Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Serilog.Debugging;
@@ -25,7 +26,7 @@ using Serilog.Parsing;
 namespace Serilog.Sinks.Signal.TextFormatters
 {
     /// <summary>
-    /// JSON formatter serializing log events into a normal format with its data normalized. The
+    /// Text formatter serializing log events into a human-readable format. The
     /// lack of a rendered message means improved network load compared to
     /// <see cref="NormalRenderedTextFormatter"/>. Often this formatter is complemented with a log
     /// server that is capable of rendering the messages of the incoming log events.
@@ -43,8 +44,9 @@ namespace Serilog.Sinks.Signal.TextFormatters
 
         public NormalTextFormatter(Options options)
         {
-            this.options = options;
+            this.options = options ?? throw new ArgumentNullException(nameof(options));
         }
+
         /// <summary>
         /// Format the log event into the output.
         /// </summary>
@@ -52,9 +54,12 @@ namespace Serilog.Sinks.Signal.TextFormatters
         /// <param name="output">The output.</param>
         public void Format(LogEvent logEvent, TextWriter output)
         {
+            if (logEvent == null) throw new ArgumentNullException(nameof(logEvent));
+            if (output == null) throw new ArgumentNullException(nameof(output));
+
             try
             {
-                var buffer = new StringWriter();
+                using var buffer = new StringWriter();
                 FormatContent(logEvent, buffer);
 
                 // If formatting was successful, write to output
@@ -68,17 +73,16 @@ namespace Serilog.Sinks.Signal.TextFormatters
 
         private void FormatContent(LogEvent logEvent, TextWriter output)
         {
-            if (logEvent == null) throw new ArgumentNullException(nameof(logEvent));
-            if (output == null) throw new ArgumentNullException(nameof(output));
-
             output.Write("Timestamp: ");
 
-            output.Write(options.TimeStampInUtc ? logEvent.Timestamp.UtcDateTime.ToString(options.TimeFormat) : logEvent.Timestamp.ToString(options.TimeFormat));
+            output.Write(options.TimeStampInUtc
+                ? logEvent.Timestamp.UtcDateTime.ToString(options.TimeFormat, CultureInfo.InvariantCulture)
+                : logEvent.Timestamp.ToString(options.TimeFormat, CultureInfo.InvariantCulture));
 
             output.WriteLine();
             output.WriteLine();
 
-            output.Write($"Level: {RetrieveLevelEmoji(logEvent.Level.ToString())}");
+            output.Write($"Level: {RetrieveLevelEmoji(logEvent.Level)}");
             output.Write(logEvent.Level);
 
             output.WriteLine();
@@ -96,7 +100,7 @@ namespace Serilog.Sinks.Signal.TextFormatters
                 output.Write("RenderedMessage:");
                 output.WriteLine();
 
-                var message = logEvent.MessageTemplate.Render(logEvent.Properties);
+                var message = logEvent.MessageTemplate.Render(logEvent.Properties, CultureInfo.InvariantCulture);
                 JsonValueFormatter.WriteQuotedJsonString(message, output);
             }
 
@@ -106,6 +110,7 @@ namespace Serilog.Sinks.Signal.TextFormatters
                 output.WriteLine();
 
                 output.Write("Exception:");
+                output.WriteLine();
                 JsonValueFormatter.WriteQuotedJsonString(logEvent.Exception.ToString(), output);
             }
 
@@ -155,6 +160,8 @@ namespace Serilog.Sinks.Signal.TextFormatters
             IReadOnlyDictionary<string, LogEventPropertyValue> properties,
             TextWriter output)
         {
+            output.WriteLine();
+            output.WriteLine();
             output.Write("Renderings:");
 
             var rdelim = string.Empty;
@@ -173,19 +180,17 @@ namespace Serilog.Sinks.Signal.TextFormatters
                     fdelim = ",";
 
                     output.Write("{\"Format\":");
-                    JsonValueFormatter.WriteQuotedJsonString(format.Format, output);
+                    JsonValueFormatter.WriteQuotedJsonString(format.Format!, output);
 
                     output.Write(",\"Rendering\":");
                     var sw = new StringWriter();
-                    format.Render(properties, sw);
+                    format.Render(properties, sw, CultureInfo.InvariantCulture);
                     JsonValueFormatter.WriteQuotedJsonString(sw.ToString(), output);
                     output.Write('}');
                 }
 
                 output.Write(']');
             }
-
-            output.Write('}');
         }
 
         private static void LogNonFormattableEvent(LogEvent logEvent, Exception e)
@@ -197,17 +202,17 @@ namespace Serilog.Sinks.Signal.TextFormatters
                 e);
         }
 
-        private string RetrieveLevelEmoji(string level)
+        private static string RetrieveLevelEmoji(LogEventLevel level)
         {
             switch (level)
             {
-                case "Information":
+                case LogEventLevel.Information:
                     return "ℹ️";
-                case "Warning":
+                case LogEventLevel.Warning:
                     return "⚠️";
-                case "Error":
+                case LogEventLevel.Error:
                     return "⛔";
-                case "Fatal":
+                case LogEventLevel.Fatal:
                     return "🔴";
                 default:
                     return string.Empty;

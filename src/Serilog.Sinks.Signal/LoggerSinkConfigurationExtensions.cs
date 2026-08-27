@@ -1,4 +1,4 @@
-﻿// Copyright 2015-2023 Serilog Contributors
+// Copyright 2015-2023 Serilog Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,6 +13,8 @@
 // limitations under the License.
 
 using System;
+using System.Globalization;
+using System.Linq;
 using Microsoft.Extensions.Configuration;
 using Serilog.Configuration;
 using Serilog.Events;
@@ -52,7 +54,7 @@ namespace Serilog
         /// </param>
         /// <param name="logEventsInBatchLimit">
         /// The maximum number of log events sent as a single batch over the network. Default
-        /// value is 1000.
+        /// value is 1.
         /// </param>
         /// <param name="batchSizeLimitBytes">
         /// The approximate maximum size, in bytes, for a single batch. The value is an
@@ -112,10 +114,8 @@ namespace Serilog
         {
             if (sinkConfiguration == null) throw new ArgumentNullException(nameof(sinkConfiguration));
             if (options == null) throw new ArgumentNullException(nameof(options));
-            if (options.SignalSettings == null) throw new ArgumentNullException(nameof(options.SignalSettings));
-            if (options.SignalSettings.RrequestUri == null) throw new ArgumentNullException(nameof(options.SignalSettings.RrequestUri));
-            if (options.SignalSettings.SenderNumber == null) throw new ArgumentNullException(nameof(options.SignalSettings.SenderNumber));
-            if (options.SignalSettings.Recipients == null) throw new ArgumentNullException(nameof(options.SignalSettings.Recipients));
+            ValidateOptions(options);
+            ValidateLimits(queueLimitBytes, logEventLimitBytes, logEventsInBatchLimit, batchSizeLimitBytes, period);
 
             // Default values
             period ??= TimeSpan.FromSeconds(2);
@@ -140,6 +140,50 @@ namespace Serilog
                 httpClient: httpClient);
 
             return sinkConfiguration.Sink(sink, restrictedToMinimumLevel);
+        }
+
+        private static void ValidateOptions(Options options)
+        {
+            var settings = options.SignalSettings ?? throw new ArgumentNullException(nameof(options));
+
+            if (string.IsNullOrWhiteSpace(settings.RequestUri))
+                throw new ArgumentException("A Signal API request URI is required.", nameof(options));
+            if (string.IsNullOrWhiteSpace(settings.SenderNumber))
+                throw new ArgumentException("A Signal sender number is required.", nameof(options));
+            if (settings.Recipients == null)
+                throw new ArgumentNullException(nameof(options));
+            if (settings.Recipients.Length == 0 || settings.Recipients.Any(string.IsNullOrWhiteSpace))
+                throw new ArgumentException("At least one non-empty Signal recipient is required.", nameof(options));
+            if (string.IsNullOrWhiteSpace(options.TimeFormat))
+                throw new ArgumentException("A timestamp format is required.", nameof(options));
+
+            try
+            {
+                _ = DateTimeOffset.UtcNow.ToString(options.TimeFormat, CultureInfo.InvariantCulture);
+            }
+            catch (FormatException exception)
+            {
+                throw new ArgumentException("The timestamp format is invalid.", nameof(options), exception);
+            }
+        }
+
+        private static void ValidateLimits(
+            long? queueLimitBytes,
+            long? logEventLimitBytes,
+            int? logEventsInBatchLimit,
+            long? batchSizeLimitBytes,
+            TimeSpan? period)
+        {
+            if (queueLimitBytes <= 0)
+                throw new ArgumentOutOfRangeException(nameof(queueLimitBytes), "The queue limit must be greater than zero or null.");
+            if (logEventLimitBytes <= 0)
+                throw new ArgumentOutOfRangeException(nameof(logEventLimitBytes), "The event limit must be greater than zero or null.");
+            if (logEventsInBatchLimit <= 0)
+                throw new ArgumentOutOfRangeException(nameof(logEventsInBatchLimit), "The batch event limit must be greater than zero or null.");
+            if (batchSizeLimitBytes <= 0)
+                throw new ArgumentOutOfRangeException(nameof(batchSizeLimitBytes), "The batch size limit must be greater than zero or null.");
+            if (period <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(period), "The period must be greater than zero or null.");
         }
     }
 }
