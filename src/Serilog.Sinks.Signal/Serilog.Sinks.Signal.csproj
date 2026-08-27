@@ -1,16 +1,27 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <!-- GENERAL -->
 
   <PropertyGroup>
     <AssemblyName>Serilog.Sinks.Signal</AssemblyName>
     <Description>A Serilog sink sending log events via Signal.</Description>
-    <TargetFrameworks>net461;netstandard2.0;netstandard2.1</TargetFrameworks>
+    <TargetFrameworks>net462;netstandard2.0</TargetFrameworks>
     <RootNamespace>Serilog</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <LangVersion>latest</LangVersion>
-    <VersionPrefix>1.1.0</VersionPrefix>
+    <VersionPrefix>1.2.0</VersionPrefix>
     <Nullable>enable</Nullable>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>1.1.0</PackageValidationBaselineVersion>
+    <!-- These names are retained to preserve the existing public API. -->
+    <NoWarn>$(NoWarn);CS1591;CA1711;CA1716</NoWarn>
     <!-- Strong naming -->
     <SignAssembly>true</SignAssembly>
     <PublicSign Condition="'$(OS)' != 'Windows_NT'">true</PublicSign>
@@ -20,7 +31,7 @@
     <PackageTags>serilog;signal;logging;logger;log;logs</PackageTags>
     <PackageIcon>serilog-sink-nuget.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-     <PackageProjectUrl>https://github.com/husam-ebish/Serilog.Sinks.Signal</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/husam-ebish/Serilog.Sinks.Signal</PackageProjectUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <!-- Embed symbols in NuGet package -->
     <IncludeSymbols>true</IncludeSymbols>
@@ -39,7 +50,7 @@
 
   <PropertyGroup>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
-     <RepositoryUrl>https://github.com/husam-ebish/Serilog.Sinks.Signal.git</RepositoryUrl>
+    <RepositoryUrl>https://github.com/husam-ebish/Serilog.Sinks.Signal.git</RepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <Authors>Husam Ebish</Authors>
     <Version />
@@ -50,47 +61,25 @@
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
-  </ItemGroup>
-
-  <!-- .NET FRAMEWORK -->
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
+  <ItemGroup Condition="'$(TargetFramework)' == 'net462'">
     <Reference Include="System" />
     <Reference Include="System.Net.Http" />
     <Reference Include="Microsoft.CSharp" />
+    <!-- Keep locked restores identical on Windows and non-Windows build agents. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net461'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net462'">
     <DefineConstants>$(DefineConstants);HRESULTS</DefineConstants>
   </PropertyGroup>
 
   <!-- PACKAGE REFERENCES -->
 
   <ItemGroup>
-    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="2.0.0" Condition="'$(TargetFramework)' == 'net461'" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="2.0.0" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="2.0.0" Condition="'$(TargetFramework)' == 'netstandard2.1'" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'net461'">
-    <PackageReference Include="System.Text.Json">
-      <Version>8.0.5</Version>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="System.Text.Json">
-      <Version>8.0.5</Version>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
-    <PackageReference Include="System.Text.Json">
-      <Version>8.0.5</Version>
-    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.11" />
+    <!-- Stay on Serilog 2.x to avoid forcing Serilog 4 assembly-binding changes on existing consumers. -->
+    <PackageReference Include="Serilog" Version="2.12.0" />
+    <PackageReference Include="System.Text.Json" Version="10.0.11" />
   </ItemGroup>
 
 </Project>

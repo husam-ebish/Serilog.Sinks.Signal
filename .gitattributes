@@ -1,3 +1,9 @@
-# Auto detect text files and perform LF normalization
+# Normalize repository text to the line endings required by EditorConfig.
+* text=auto eol=lf
 
-* text=auto
+# Visual Studio solution files conventionally use CRLF.
+*.sln text eol=crlf
+
+# Do not attempt text conversion for binary assets or the strong-name key.
+*.png binary
+*.snk binary
