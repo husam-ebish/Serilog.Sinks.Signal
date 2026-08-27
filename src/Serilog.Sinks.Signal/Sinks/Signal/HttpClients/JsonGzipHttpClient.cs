@@ -1,4 +1,4 @@
-﻿// Copyright 2015-2023 Serilog Contributors
+// Copyright 2015-2023 Serilog Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,110 +16,115 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 
-namespace Serilog.Sinks.Signal.HttpClients
+namespace Serilog.Sinks.Signal.HttpClients;
+
+/// <summary>
+/// HTTP client sending gzip-compressed JSON over the network.
+/// </summary>
+/// <remarks>
+/// Compression reduces network traffic at the expense of additional CPU and memory use. The Signal API endpoint
+/// must accept gzip request content.
+/// </remarks>
+/// <seealso cref="JsonHttpClient"/>
+/// <seealso cref="IHttpClient"/>
+public class JsonGzipHttpClient : IHttpClient
 {
+    private const string JsonContentType = "application/json";
+    private const string GzipContentEncoding = "gzip";
+
+    private readonly HttpClient httpClient;
+    private bool disposed;
+
     /// <summary>
-    /// HTTP client sending Gzip encoded JSON over the network.
+    /// Initializes a new instance using the fastest compression level.
     /// </summary>
-    /// <remarks>
-    /// This sink will, in comparison to <seealso cref="JsonHttpClient"/>, send smaller requests
-    /// over the network at the expense of increased CPU and memory utilization.
-    /// </remarks>
-    /// <seealso cref="JsonHttpClient"/>
-    /// <seealso cref="IHttpClient"/>
-    public class JsonGzipHttpClient : IHttpClient
+    public JsonGzipHttpClient()
+        : this(CompressionLevel.Fastest)
     {
-        private const string JsonContentType = "application/json";
-        private const string GzipContentEncoding = "gzip";
+    }
 
-        private readonly HttpClient httpClient;
+    /// <summary>
+    /// Initializes a new instance using the specified compression level.
+    /// </summary>
+    public JsonGzipHttpClient(CompressionLevel compressionLevel)
+        : this(new HttpClient(), compressionLevel)
+    {
+    }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="JsonGzipHttpClient"/> class with
-        /// fastest compression level.
-        /// </summary>
-        public JsonGzipHttpClient()
-            : this(CompressionLevel.Fastest)
+    /// <summary>
+    /// Initializes a new instance using the specified HTTP client and compression level. The client is disposed
+    /// with this instance.
+    /// </summary>
+    public JsonGzipHttpClient(HttpClient httpClient, CompressionLevel compressionLevel)
+    {
+        this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        CompressionLevel = compressionLevel;
+    }
+
+    /// <summary>
+    /// Gets or sets the compression level.
+    /// </summary>
+    protected CompressionLevel CompressionLevel { get; set; }
+
+    /// <inheritdoc />
+    public virtual void Configure(IConfiguration configuration)
+    {
+        _ = configuration ?? throw new ArgumentNullException(nameof(configuration));
+    }
+
+    /// <summary>
+    /// Compresses and sends a JSON stream to the specified URI.
+    /// </summary>
+    public virtual async Task<HttpResponseMessage> PostAsync(string requestUri, Stream contentStream)
+    {
+        if (requestUri == null) throw new ArgumentNullException(nameof(requestUri));
+        if (contentStream == null) throw new ArgumentNullException(nameof(contentStream));
+        if (disposed) throw new ObjectDisposedException(nameof(JsonGzipHttpClient));
+
+        using var output = new MemoryStream();
+        using (var gzipStream = new GZipStream(output, CompressionLevel, leaveOpen: true))
         {
+            await contentStream.CopyToAsync(gzipStream).ConfigureAwait(false);
         }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="JsonGzipHttpClient"/> class with
-        /// specified compression level.
-        /// </summary>
-        public JsonGzipHttpClient(CompressionLevel compressionLevel)
-            : this(new HttpClient(), compressionLevel)
-        {
-        }
+        output.Position = 0;
+        using var content = new StreamContent(output);
+        content.Headers.ContentType = new MediaTypeHeaderValue(JsonContentType);
+        content.Headers.ContentEncoding.Add(GzipContentEncoding);
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="JsonGzipHttpClient"/> class with
-        /// specified HTTP client and compression level.
-        /// </summary>
-        public JsonGzipHttpClient(HttpClient httpClient, CompressionLevel compressionLevel)
-        {
-            this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-            CompressionLevel = compressionLevel;
-        }
+        return await httpClient.PostAsync(requestUri, content).ConfigureAwait(false);
+    }
 
-        ~JsonGzipHttpClient()
-        {
-            Dispose(false);
-        }
+    /// <inheritdoc />
+    public virtual async Task<HttpResponseMessage> PostAsync(string requestUri, SignalLogMessage requestContent)
+    {
+        if (requestContent == null) throw new ArgumentNullException(nameof(requestContent));
 
-        /// <summary>
-        /// Gets or sets the compression level.
-        /// </summary>
-        protected CompressionLevel CompressionLevel { get; set; }
+        using var input = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(requestContent), writable: false);
+        return await PostAsync(requestUri, input).ConfigureAwait(false);
+    }
 
-        /// <inheritdoc />
-        public virtual void Configure(IConfiguration configuration)
-        {
-        }
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
-        /// <inheritdoc />
-        public virtual async Task<HttpResponseMessage> PostAsync(string requestUri, Stream contentStream)
-        {
-            using var output = new MemoryStream();
+    /// <summary>
+    /// Releases resources owned by this client.
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposing || disposed)
+            return;
 
-            using (var gzipStream = new GZipStream(output, CompressionLevel, true))
-            {
-                await contentStream
-                    .CopyToAsync(gzipStream)
-                    .ConfigureAwait(false);
-            }
-
-            output.Position = 0;
-
-            var content = new StreamContent(output);
-            content.Headers.Add("Content-Type", JsonContentType);
-            content.Headers.Add("Content-Encoding", GzipContentEncoding);
-
-            var response = await httpClient
-                .PostAsync(requestUri, content)
-                .ConfigureAwait(false);
-
-            return response;
-        }
-
-        public Task<HttpResponseMessage> PostAsync(string requestUri, SignalLogMessage requestContent) => throw new NotImplementedException();
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                httpClient.Dispose();
-            }
-        }
+        httpClient.Dispose();
+        disposed = true;
     }
 }

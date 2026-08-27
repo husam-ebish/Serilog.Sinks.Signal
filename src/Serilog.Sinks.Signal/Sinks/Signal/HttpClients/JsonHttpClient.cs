@@ -1,4 +1,4 @@
-﻿// Copyright 2015-2023 Serilog Contributors
+// Copyright 2015-2023 Serilog Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,88 +15,94 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Serilog.Sinks.Signal.Private;
 
-namespace Serilog.Sinks.Signal.HttpClients
+namespace Serilog.Sinks.Signal.HttpClients;
+
+/// <summary>
+/// HTTP client sending JSON over the network.
+/// </summary>
+/// <seealso cref="JsonGzipHttpClient"/>
+/// <seealso cref="IHttpClient"/>
+public class JsonHttpClient : IHttpClient
 {
+    private const string JsonContentType = "application/json";
+
+    private readonly HttpClient httpClient;
+    private bool disposed;
+
     /// <summary>
-    /// HTTP client sending JSON over the network.
+    /// Initializes a new instance of the <see cref="JsonHttpClient"/> class.
     /// </summary>
-    /// <seealso cref="JsonGzipHttpClient"/>
-    /// <seealso cref="IHttpClient"/>
-    public class JsonHttpClient : IHttpClient
+    public JsonHttpClient()
+        : this(new HttpClient())
     {
-        private const string JsonContentType = "application/json";
+    }
 
-        private readonly HttpClient httpClient;
+    /// <summary>
+    /// Initializes a new instance using the specified HTTP client. The client is disposed with this instance.
+    /// </summary>
+    public JsonHttpClient(HttpClient httpClient)
+    {
+        this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+    }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="JsonHttpClient"/> class.
-        /// </summary>
-        public JsonHttpClient()
-            : this(new HttpClient())
-        {
-        }
+    /// <inheritdoc />
+    public virtual void Configure(IConfiguration configuration)
+    {
+        _ = configuration ?? throw new ArgumentNullException(nameof(configuration));
+    }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="JsonHttpClient"/> class with
-        /// specified HTTP client.
-        /// </summary>
-        public JsonHttpClient(HttpClient httpClient)
-        {
-            this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        }
+    /// <summary>
+    /// Sends a JSON stream to the specified URI.
+    /// </summary>
+    public virtual async Task<HttpResponseMessage> PostAsync(string requestUri, Stream contentStream)
+    {
+        if (requestUri == null) throw new ArgumentNullException(nameof(requestUri));
+        if (contentStream == null) throw new ArgumentNullException(nameof(contentStream));
+        if (disposed) throw new ObjectDisposedException(nameof(JsonHttpClient));
 
-        ~JsonHttpClient()
-        {
-            Dispose(false);
-        }
+        using var content = new StreamContent(contentStream);
+        content.Headers.ContentType = new MediaTypeHeaderValue(JsonContentType);
 
-        /// <inheritdoc />
-        public virtual void Configure(IConfiguration configuration)
-        {
-        }
+        return await httpClient.PostAsync(requestUri, content).ConfigureAwait(false);
+    }
 
-        /// <inheritdoc />
-        public virtual async Task<HttpResponseMessage> PostAsync(string requestUri, Stream contentStream)
-        {
-            using var content = new StreamContent(contentStream);
-            content.Headers.Add("Content-Type", JsonContentType);
+    /// <inheritdoc />
+    public virtual async Task<HttpResponseMessage> PostAsync(string requestUri, SignalLogMessage requestContent)
+    {
+        if (requestUri == null) throw new ArgumentNullException(nameof(requestUri));
+        if (requestContent == null) throw new ArgumentNullException(nameof(requestContent));
+        if (disposed) throw new ObjectDisposedException(nameof(JsonHttpClient));
 
-            var response = await httpClient
-                .PostAsync(requestUri, content)
-                .ConfigureAwait(false);
+        using var content = new StringContent(
+            JsonSerializer.Serialize(requestContent),
+            Encoding.UTF8WithoutBom,
+            JsonContentType);
 
-            return response;
-        }
+        return await httpClient.PostAsync(requestUri, content).ConfigureAwait(false);
+    }
 
-        public async Task<HttpResponseMessage> PostAsync(string requestUri, SignalLogMessage requestContent)
-        {
-            var content = new StringContent(JsonSerializer.Serialize(requestContent), Encoding.UTF8WithoutBom, "application/json");
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
-            var response = await httpClient
-                .PostAsync(requestUri, content)
-            .ConfigureAwait(false);
+    /// <summary>
+    /// Releases resources owned by this client.
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposing || disposed)
+            return;
 
-            return response;
-        }
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                httpClient.Dispose();
-            }
-        }
+        httpClient.Dispose();
+        disposed = true;
     }
 }
