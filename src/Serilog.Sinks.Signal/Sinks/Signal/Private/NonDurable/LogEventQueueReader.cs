@@ -1,4 +1,4 @@
-﻿// Copyright 2015-2023 Serilog Contributors
+// Copyright 2015-2023 Serilog Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System;
 using Serilog.Debugging;
 
 namespace Serilog.Sinks.Signal.Private.NonDurable
@@ -20,6 +21,10 @@ namespace Serilog.Sinks.Signal.Private.NonDurable
     {
         public static Batch Read(LogEventQueue queue, int? logEventsInBatchLimit, long? batchSizeLimitBytes)
         {
+            if (queue == null) throw new ArgumentNullException(nameof(queue));
+            if (logEventsInBatchLimit <= 0) throw new ArgumentOutOfRangeException(nameof(logEventsInBatchLimit));
+            if (batchSizeLimitBytes <= 0) throw new ArgumentOutOfRangeException(nameof(batchSizeLimitBytes));
+
             var batch = new Batch();
             var remainingBatchSizeBytes = batchSizeLimitBytes;
 

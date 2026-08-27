@@ -1,4 +1,4 @@
-﻿// Copyright 2015-2023 Serilog Contributors
+// Copyright 2015-2023 Serilog Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ namespace Serilog.Sinks.Signal.Private.Time
 
         public ExponentialBackoffConnectionSchedule(TimeSpan period)
         {
-            if (period < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(period), "The connection retry period must be a positive timespan");
+            if (period <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(period), "The connection retry period must be a positive timespan");
 
             this.period = period;
         }
@@ -46,7 +46,10 @@ namespace Serilog.Sinks.Signal.Private.Time
 
         public void MarkFailure()
         {
-            failuresSinceSuccessfulConnection++;
+            if (failuresSinceSuccessfulConnection < int.MaxValue)
+            {
+                failuresSinceSuccessfulConnection++;
+            }
         }
 
         public TimeSpan NextInterval

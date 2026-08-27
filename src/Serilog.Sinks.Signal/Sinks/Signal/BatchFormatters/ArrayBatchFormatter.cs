@@ -1,4 +1,4 @@
-﻿// Copyright 2015-2023 Serilog Contributors
+// Copyright 2015-2023 Serilog Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,18 +15,14 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 
 namespace Serilog.Sinks.Signal.BatchFormatters
 {
     /// <summary>
-    /// Formatter serializing batches of log events into a JSON array.
+    /// Formatter combining a batch of rendered log events into one Signal message.
     /// <para />
     /// Example:
-    /// [
-    ///   { event n },
-    ///   { event n+1 }
-    /// ]
+    /// event n,event n+1
     /// </summary>
     public class ArrayBatchFormatter : IBatchFormatter
     {
@@ -35,12 +31,6 @@ namespace Serilog.Sinks.Signal.BatchFormatters
         {
             if (logEvents == null) throw new ArgumentNullException(nameof(logEvents));
             if (output == null) throw new ArgumentNullException(nameof(output));
-
-            // Abort if sequence of log events is empty
-            if (!logEvents.Any())
-            {
-                return;
-            }
 
             var delimStart = string.Empty;
 
@@ -55,9 +45,6 @@ namespace Serilog.Sinks.Signal.BatchFormatters
                 output.Write(logEvent);
                 delimStart = ",";
             }
-
-            output.Write(string.Empty);
-            output.Write(string.Empty);
         }
     }
 }

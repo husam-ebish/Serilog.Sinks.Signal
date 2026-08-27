@@ -41,12 +41,14 @@ namespace Serilog.Sinks.Signal.Private.NonDurable
             var result = TryEnqueue(logEvent);
             if (result != EnqueueResult.Ok)
             {
-                throw new Exception($"Enqueue log event failed: {result}");
+                throw new InvalidOperationException($"Enqueue log event failed: {result}");
             }
         }
 
         public EnqueueResult TryEnqueue(string logEvent)
         {
+            if (logEvent == null) throw new ArgumentNullException(nameof(logEvent));
+
             lock (syncRoot)
             {
                 var logEventByteSize = ByteSize.From(logEvent);

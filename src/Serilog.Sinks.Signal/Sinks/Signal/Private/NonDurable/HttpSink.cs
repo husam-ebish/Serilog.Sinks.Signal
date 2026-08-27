@@ -1,4 +1,4 @@
-﻿// Copyright 2015-2023 Serilog Contributors
+// Copyright 2015-2023 Serilog Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,8 @@ namespace Serilog.Sinks.Signal.Private.NonDurable
 {
     public class HttpSink : ILogEventSink, IDisposable
     {
-        private readonly Options options;
+        private const int MaximumLoggedResponseBodyLength = 4096;
+
         private readonly long? logEventLimitBytes;
         private readonly int? logEventsInBatchLimit;
         private readonly long? batchSizeLimitBytes;
@@ -37,6 +38,9 @@ namespace Serilog.Sinks.Signal.Private.NonDurable
         private readonly PortableTimer timer;
         private readonly object syncRoot = new();
         private readonly LogEventQueue queue;
+        private readonly string requestUri;
+        private readonly string senderNumber;
+        private readonly string[] recipients;
 
         private Batch? unsentBatch;
         private volatile bool disposed;
@@ -52,7 +56,18 @@ namespace Serilog.Sinks.Signal.Private.NonDurable
             IBatchFormatter batchFormatter,
             IHttpClient httpClient)
         {
-            this.options = options ?? throw new ArgumentNullException(nameof(options));
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            if (logEventLimitBytes <= 0) throw new ArgumentOutOfRangeException(nameof(logEventLimitBytes));
+            if (logEventsInBatchLimit <= 0) throw new ArgumentOutOfRangeException(nameof(logEventsInBatchLimit));
+            if (batchSizeLimitBytes <= 0) throw new ArgumentOutOfRangeException(nameof(batchSizeLimitBytes));
+
+            var settings = options.SignalSettings ?? throw new ArgumentNullException(nameof(options));
+            requestUri = settings.RequestUri ?? throw new ArgumentNullException(nameof(options));
+            senderNumber = settings.SenderNumber ?? throw new ArgumentNullException(nameof(options));
+            recipients = settings.Recipients == null
+                ? throw new ArgumentNullException(nameof(options))
+                : (string[])settings.Recipients.Clone();
+
             this.logEventLimitBytes = logEventLimitBytes;
             this.logEventsInBatchLimit = logEventsInBatchLimit;
             this.batchSizeLimitBytes = batchSizeLimitBytes;
@@ -71,9 +86,12 @@ namespace Serilog.Sinks.Signal.Private.NonDurable
         {
             if (logEvent == null) throw new ArgumentNullException(nameof(logEvent));
 
-            var writer = new StringWriter();
-            textFormatter.Format(logEvent, writer);
-            var formattedLogEvent = writer.ToString();
+            string formattedLogEvent;
+            using (var writer = new StringWriter())
+            {
+                textFormatter.Format(logEvent, writer);
+                formattedLogEvent = writer.ToString();
+            }
 
             if (ByteSize.From(formattedLogEvent) > logEventLimitBytes)
             {
@@ -84,10 +102,19 @@ namespace Serilog.Sinks.Signal.Private.NonDurable
                 return;
             }
 
-            var result = queue.TryEnqueue(formattedLogEvent);
-            if (result == LogEventQueue.EnqueueResult.QueueFull)
+            lock (syncRoot)
             {
-                SelfLog.WriteLine("Queue has reached its limit and the log event will be dropped; data: {0}", formattedLogEvent);
+                if (disposed)
+                {
+                    SelfLog.WriteLine("Cannot emit a log event because the Signal sink has been disposed.");
+                    return;
+                }
+
+                var result = queue.TryEnqueue(formattedLogEvent);
+                if (result == LogEventQueue.EnqueueResult.QueueFull)
+                {
+                    SelfLog.WriteLine("Queue has reached its limit and the log event will be dropped; data: {0}", formattedLogEvent);
+                }
             }
         }
 
@@ -101,15 +128,21 @@ namespace Serilog.Sinks.Signal.Private.NonDurable
                 disposed = true;
             }
 
-            timer.Dispose();
-
-            OnTick().GetAwaiter().GetResult();
-            httpClient.Dispose();
+            try
+            {
+                timer.Dispose();
+                OnTick().GetAwaiter().GetResult();
+            }
+            finally
+            {
+                httpClient.Dispose();
+                GC.SuppressFinalize(this);
+            }
         }
 
         private void SetTimer()
         {
-            // Note, called under syncRoot
+            // Called under syncRoot after construction.
             timer.Start(connectionSchedule.NextInterval);
         }
 
@@ -117,74 +150,60 @@ namespace Serilog.Sinks.Signal.Private.NonDurable
         {
             try
             {
-                Batch? batch;
+                Batch batch;
 
                 do
                 {
                     batch = unsentBatch ?? LogEventQueueReader.Read(queue, logEventsInBatchLimit, batchSizeLimitBytes);
 
-                    if (batch.LogEvents.Count > 0)
+                    if (batch.LogEvents.Count == 0)
                     {
-                        HttpResponseMessage response;
+                        connectionSchedule.MarkSuccess();
+                        continue;
+                    }
 
-                        using (var contentStream = new MemoryStream())
-                        using (var contentWriter = new StreamWriter(contentStream, Encoding.UTF8WithoutBom))
-                        {
-                            if (options.SignalSettings == null)
-                            {
-                                throw new ArgumentNullException(nameof(options.SignalSettings));
-                            }
+                    // Retain the dequeued batch before any formatting or network operation can fail.
+                    unsentBatch = batch;
 
-                            batchFormatter.Format(batch.LogEvents, contentWriter);
+                    string payload;
+                    using (var payloadWriter = new StringWriter())
+                    {
+                        batchFormatter.Format(batch.LogEvents, payloadWriter);
+                        payload = payloadWriter.ToString();
+                    }
 
-                            await contentWriter.FlushAsync();
-                            contentStream.Position = 0;
+                    if (payload.Length == 0)
+                    {
+                        connectionSchedule.MarkSuccess();
+                        unsentBatch = null;
+                        continue;
+                    }
 
-                            if (contentStream.Length == 0)
-                                continue;
-
-                            //response = await httpClient
-                            //    .PostAsync(requestUri, contentStream)
-                            //    .ConfigureAwait(false);
-
-                            StreamReader reader = new StreamReader(contentStream);
-
-                            response = await httpClient
-                                .PostAsync(options.SignalSettings.RrequestUri!,
-                                    new SignalLogMessage(
-                                        reader.ReadToEnd(),
-                                        options.SignalSettings.SenderNumber!,
-                                        options.SignalSettings.Recipients!))
-                            .ConfigureAwait(false);
-                        }
-
+                    using (HttpResponseMessage response = await httpClient
+                        .PostAsync(requestUri, new SignalLogMessage(payload, senderNumber, recipients))
+                        .ConfigureAwait(false))
+                    {
                         if (response.IsSuccessStatusCode)
                         {
                             connectionSchedule.MarkSuccess();
                             unsentBatch = null;
+                            continue;
                         }
-                        else
-                        {
-                            connectionSchedule.MarkFailure();
-                            unsentBatch = batch;
 
-                            var statusCode = response.StatusCode;
-                            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                            SelfLog.WriteLine("Received failed HTTP shipping result {0}: {1}", statusCode, body);
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        // For whatever reason, there's nothing waiting to be sent. This means we should try connecting
-                        // again at the regular interval, so mark the attempt as successful.
-                        connectionSchedule.MarkSuccess();
+                        connectionSchedule.MarkFailure();
+
+                        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        if (body.Length > MaximumLoggedResponseBodyLength)
+                            body = body.Substring(0, MaximumLoggedResponseBodyLength) + "…";
+
+                        SelfLog.WriteLine("Received failed HTTP shipping result {0}: {1}", response.StatusCode, body);
+                        break;
                     }
                 } while (batch.HasReachedLimit);
             }
-            catch (Exception e)
+            catch (Exception exception)
             {
-                SelfLog.WriteLine("Exception while emitting periodic batch from {0}: {1}", this, e);
+                SelfLog.WriteLine("Exception while emitting periodic batch from {0}: {1}", this, exception);
                 connectionSchedule.MarkFailure();
             }
             finally
@@ -192,9 +211,7 @@ namespace Serilog.Sinks.Signal.Private.NonDurable
                 lock (syncRoot)
                 {
                     if (!disposed)
-                    {
                         SetTimer();
-                    }
                 }
             }
         }
