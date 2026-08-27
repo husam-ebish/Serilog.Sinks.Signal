@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -6,6 +6,10 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{DB19D3CD-BF05-45EA-97D8-FC9F64BF0B7B}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Serilog.Sinks.Signal", "src\Serilog.Sinks.Signal\Serilog.Sinks.Signal.csproj", "{9F19B05C-07F4-459E-87D9-499DA732BFE2}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{6A86D22E-A4DB-4DC5-AE28-A6BD89F64712}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Serilog.Sinks.Signal.Tests", "tests\Serilog.Sinks.Signal.Tests\Serilog.Sinks.Signal.Tests.csproj", "{58735B47-5125-47B5-91D0-49104CF06863}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,12 +21,17 @@ Global
 		{9F19B05C-07F4-459E-87D9-499DA732BFE2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9F19B05C-07F4-459E-87D9-499DA732BFE2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9F19B05C-07F4-459E-87D9-499DA732BFE2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{58735B47-5125-47B5-91D0-49104CF06863}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{58735B47-5125-47B5-91D0-49104CF06863}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{58735B47-5125-47B5-91D0-49104CF06863}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{58735B47-5125-47B5-91D0-49104CF06863}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{9F19B05C-07F4-459E-87D9-499DA732BFE2} = {DB19D3CD-BF05-45EA-97D8-FC9F64BF0B7B}
+		{58735B47-5125-47B5-91D0-49104CF06863} = {6A86D22E-A4DB-4DC5-AE28-A6BD89F64712}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {F8A6D01E-9C56-4B8F-93B5-8A1D7F693340}
